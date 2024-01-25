@@ -5,7 +5,7 @@ import RatingComparisonChart from '../components/RatingComparisonChart';
 import * as d3 from 'd3';
 
 const fetchData = async () => {
-  const rawData = await d3.dsv(";", "http://localhost:3000/albums.csv");
+  const rawData = await d3.dsv(";", "/api/albums.csv");
 
   const albums = rawData.map(({ album, current_price, release_date, rym_user_rating, rym_own_rating }) => ({
     album,
