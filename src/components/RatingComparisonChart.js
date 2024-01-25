@@ -9,8 +9,15 @@ const RatingComparisonChart = ({ data }) => {
   useEffect(() => {
     if (!data) return;
 
-    const margin = { top: 60, right: 60, bottom: 60, left: 60 };
-    const width = 1000 - margin.left - margin.right;
+    // Sort the data by release date (oldest to newest)
+    const sortedData = [...data].sort((a, b) => {
+      const dateA = d3.timeParse('%Y-%m-%d')(a.release_date);
+      const dateB = d3.timeParse('%Y-%m-%d')(b.release_date);
+      return d3.ascending(dateA, dateB);
+    });
+
+    const margin = { top: 60, right: 120, bottom: 60, left: 60 };
+    const width = 1400 - margin.left - margin.right;
     const height = 800 - margin.top - margin.bottom;
 
     const svg = d3.select(chartRef.current);
@@ -24,20 +31,45 @@ const RatingComparisonChart = ({ data }) => {
       .attr('transform', `translate(${margin.left},${margin.top})`);
 
     const xScale = d3.scaleBand()
-      .domain(data.map(d => d.album))
+      .domain(sortedData.map(d => d.album))
       .range([0, width])
-      .padding(0.4)
+      .padding(0.8) // Adjusted padding for more space between albums
       .align(0.5);
 
-    const yScale = d3.scaleLinear()
-      .domain([2.25, 5.25])
+    const yScaleRating = d3.scaleLinear()
+      .domain([2, 5])
       .range([height, 0]);
 
-    let filteredData = data;
+    const maxPrice = 250; // Maximum price in PLN
+    const minRating = 2; // Minimum rating
+    const maxRating = 5; // Maximum rating
+
+    // Adjusted the scale to align 150 PLN with a rating of 4.0
+    const yScalePrice = d3.scaleLinear()
+      .domain([0, maxPrice])
+      .range([height, 0])
+      .nice();
+
+    let filteredData = sortedData;
 
     // Handle different cases for checkbox combinations
     if (!(showUserRating && showOwnRating)) {
-      filteredData = data.filter(d => (showUserRating && d.rym_user_rating) || (showOwnRating && d.rym_own_rating));
+      filteredData = sortedData.filter(d => (showUserRating && d.rym_user_rating) || (showOwnRating && d.rym_own_rating));
+    }
+
+    // Draw lines connecting user and own rating circles
+    if (showUserRating && showOwnRating) {
+      mainSvg.selectAll('.line')
+        .data(filteredData)
+        .enter().append('line')
+        .attr('class', 'line')
+        .attr('x1', d => xScale(d.album) + xScale.bandwidth() / 2)
+        .attr('y1', d => yScaleRating(d.rym_user_rating))
+        .attr('x2', d => xScale(d.album) + xScale.bandwidth() / 2)
+        .attr('y2', d => yScaleRating(d.rym_own_rating))
+        .attr('stroke', 'gray')
+        .attr('stroke-width', 4)
+        .attr('opacity', 0.5);
     }
 
     // Draw circles for rym_user_rating
@@ -46,10 +78,9 @@ const RatingComparisonChart = ({ data }) => {
       .enter().append('circle')
       .attr('class', 'user-rating-circle')
       .attr('cx', d => xScale(d.album) + xScale.bandwidth() / 2)
-      .attr('cy', d => showUserRating ? yScale(d.rym_user_rating) : height + 1000) // Adjusted the position when not visible
-      .attr('r', 4)
-      .attr('fill', 'blue')
-      .attr('opacity', 0.7)
+      .attr('cy', d => showUserRating ? yScaleRating(d.rym_user_rating) : height + 1000) // Adjusted the position when not visible
+      .attr('r', 8)
+      .attr('fill', '#3D348B')
       .attr('data-album', d => d.album)
       .attr('pointer-events', 'all'); // Enable mouse events for the circle
 
@@ -59,10 +90,9 @@ const RatingComparisonChart = ({ data }) => {
       .enter().append('circle')
       .attr('class', 'own-rating-circle')
       .attr('cx', d => xScale(d.album) + xScale.bandwidth() / 2)
-      .attr('cy', d => showOwnRating ? yScale(d.rym_own_rating) : height + 1000) // Adjusted the position when not visible
-      .attr('r', 4)
-      .attr('fill', 'green')
-      .attr('opacity', 0.9)
+      .attr('cy', d => showOwnRating ? yScaleRating(d.rym_own_rating) : height + 1000) // Adjusted the position when not visible
+      .attr('r', 8)
+      .attr('fill', '#E6AF2E')
       .attr('data-album', d => d.album)
       .attr('pointer-events', 'all'); // Enable mouse events for the circle
 
@@ -73,39 +103,43 @@ const RatingComparisonChart = ({ data }) => {
       .selectAll('text')
       .remove(); // Remove album labels
 
-    // Add Y-axis
+    // Add left Y-axis for ratings
     mainSvg.append('g')
-      .call(d3.axisLeft(yScale));
+      .call(d3.axisLeft(yScaleRating).tickValues([2, 2.5, 3, 3.5, 4, 4.5, 5]));
 
-    // Draw horizontal grid lines
-    const yGrid = d3.axisLeft(yScale)
-      .tickValues([2.5, 3, 3.5, 4, 4.5, 5])
+    // Draw horizontal grid lines for ratings
+    const yGridRating = d3.axisLeft(yScaleRating)
+      .tickValues([2.5, 3, 3.5, 4, 4.5])
       .tickSize(-width)
       .tickFormat('')
       .tickSizeOuter(0); // Hide the outermost ticks
 
     mainSvg.append('g')
       .attr('class', 'grid')
-      .call(yGrid)
+      .call(yGridRating)
       .selectAll('line')
       .attr('opacity', 0.2); // Adjust opacity for subtle grid lines
 
-    // Add Y-axis label
-    mainSvg.append('text')
-      .attr('class', 'axis-label')
-      .attr('text-anchor', 'middle')
-      .attr('transform', 'rotate(-90)')
-      .attr('y', 0 - margin.left)
-      .attr('x', 0 - height / 2)
-      .attr('dy', '1em')
-      .text('RateYourMusic.com ratings');
+    // Add right Y-axis for prices
+    mainSvg.append('g')
+      .attr('transform', `translate(${width}, 0)`)
+      .call(d3.axisRight(yScalePrice)
+        .ticks(5)
+        .tickFormat(d => `PLN ${d.toFixed(2)}`)
+        .scale(yScalePrice));
 
-    // Add X-axis label
-    mainSvg.append('text')
-      .attr('class', 'axis-label')
-      .attr('text-anchor', 'middle')
-      .attr('transform', `translate(${width / 2},${height + 40})`) // Adjusted the y-coordinate
-      .text('Albums');
+    // Draw area graph for current price
+    const areaGenerator = d3.area()
+      .x(d => xScale(d.album) + xScale.bandwidth() / 2)
+      .y0(height)
+      .y1(d => yScalePrice(+d.current_price));
+
+    mainSvg.append('path')
+      .datum(filteredData)
+      .attr('class', 'area')
+      .attr('d', areaGenerator)
+      .attr('fill', '#499647')
+      .attr('opacity', 0.5);
 
     // Tooltip container
     const tooltipContainer = svg
@@ -114,6 +148,7 @@ const RatingComparisonChart = ({ data }) => {
       .style('opacity', 0)
       .style('position', 'absolute')
       .style('border', '1px solid darkgrey')
+      .style('border-radius', '4px')
       .style('background-color', 'rgba(245, 245, 245, 0.7)')
       .style('padding', '8px');
 
@@ -128,7 +163,7 @@ const RatingComparisonChart = ({ data }) => {
         .duration(200)
         .style('opacity', 0.9);
 
-      tooltip.html(`${d.album}<br>User Rating: ${d.rym_user_rating}<br>Own Rating: ${d.rym_own_rating}`);
+      tooltip.html(`<h2>${d.album}</h2><br>Release Date: ${d.release_date}<br><br>User Rating: ${d.rym_user_rating}<br>Personal Rating: ${d.rym_own_rating}<br>Current Price: PLN ${d.current_price}`);
       
       // Position tooltip using clientX and clientY
       tooltipContainer.style('left', `${event.clientX + 10}px`)
@@ -150,29 +185,31 @@ const RatingComparisonChart = ({ data }) => {
   }, [data, showUserRating, showOwnRating]);
 
   return (
-    <div>
-      <div>
-        <label>
-          Show User Rating
-          <input 
-            type="checkbox" 
-            checked={showUserRating}
-            onChange={() => setShowUserRating(!showUserRating)}
-          />
-        </label>
-      </div>
-      <div>
-        <label>
-          Show Own Rating
-          <input 
-            type="checkbox" 
-            checked={showOwnRating}
-            onChange={() => setShowOwnRating(!showOwnRating)}
-          />
-        </label>
+    <>
+      <div className='inputs'>
+        <div>
+          <label>
+            <input 
+              type="checkbox" 
+              checked={showUserRating}
+              onChange={() => setShowUserRating(!showUserRating)}
+            />
+            Show User Rating
+          </label>
+        </div>
+        <div>
+          <label>
+            <input 
+              type="checkbox" 
+              checked={showOwnRating}
+              onChange={() => setShowOwnRating(!showOwnRating)}
+            />
+            Show Personal Rating
+          </label>
+        </div>
       </div>
       <div ref={chartRef}></div>
-    </div>
+    </>
   );
 };
 
