@@ -5,23 +5,29 @@ const RatingComparisonChart = ({ data }) => {
   const chartRef = useRef();
   const [showUserRating, setShowUserRating] = useState(true);
   const [showOwnRating, setShowOwnRating] = useState(true);
+  const [showPriceGraph, setShowPriceGraph] = useState(true);
+  const [sortByReleaseDate, setSortByReleaseDate] = useState(true); // New state for sorting
 
   useEffect(() => {
     if (!data) return;
 
-    // Sort the data by release date (oldest to newest)
-    const sortedData = [...data].sort((a, b) => {
-      const dateA = d3.timeParse('%Y-%m-%d')(a.release_date);
-      const dateB = d3.timeParse('%Y-%m-%d')(b.release_date);
-      return d3.ascending(dateA, dateB);
-    });
+    let sortedData;
+    if (sortByReleaseDate) {
+      sortedData = [...data].sort((a, b) => {
+        const dateA = d3.timeParse('%Y-%m-%d')(a.release_date);
+        const dateB = d3.timeParse('%Y-%m-%d')(b.release_date);
+        return d3.ascending(dateA, dateB);
+      });
+    } else {
+      sortedData = [...data].sort((a, b) => a.current_price - b.current_price);
+    }
 
     const margin = { top: 60, right: 120, bottom: 60, left: 60 };
     const width = 1400 - margin.left - margin.right;
     const height = 800 - margin.top - margin.bottom;
 
     const svg = d3.select(chartRef.current);
-    svg.selectAll('*').remove(); // Clear existing elements
+    svg.selectAll('*').remove();
 
     const mainSvg = svg
       .append('svg')
@@ -33,18 +39,14 @@ const RatingComparisonChart = ({ data }) => {
     const xScale = d3.scaleBand()
       .domain(sortedData.map(d => d.album))
       .range([0, width])
-      .padding(0.8) // Adjusted padding for more space between albums
+      .padding(0.8)
       .align(0.5);
 
     const yScaleRating = d3.scaleLinear()
       .domain([2, 5])
       .range([height, 0]);
 
-    const maxPrice = 250; // Maximum price in PLN
-    const minRating = 2; // Minimum rating
-    const maxRating = 5; // Maximum rating
-
-    // Adjusted the scale to align 150 PLN with a rating of 4.0
+    const maxPrice = 225;
     const yScalePrice = d3.scaleLinear()
       .domain([0, maxPrice])
       .range([height, 0])
@@ -52,12 +54,10 @@ const RatingComparisonChart = ({ data }) => {
 
     let filteredData = sortedData;
 
-    // Handle different cases for checkbox combinations
-    if (!(showUserRating && showOwnRating)) {
+    if (!(showUserRating && showOwnRating) && (showPriceGraph || (!showUserRating && !showOwnRating))) {
       filteredData = sortedData.filter(d => (showUserRating && d.rym_user_rating) || (showOwnRating && d.rym_own_rating));
     }
 
-    // Draw lines connecting user and own rating circles
     if (showUserRating && showOwnRating) {
       mainSvg.selectAll('.line')
         .data(filteredData)
@@ -72,55 +72,51 @@ const RatingComparisonChart = ({ data }) => {
         .attr('opacity', 0.5);
     }
 
-    // Draw circles for rym_user_rating
     mainSvg.selectAll('.user-rating-circle')
       .data(filteredData)
       .enter().append('circle')
       .attr('class', 'user-rating-circle')
+      .attr('style', 'z-index: 1;')
       .attr('cx', d => xScale(d.album) + xScale.bandwidth() / 2)
-      .attr('cy', d => showUserRating ? yScaleRating(d.rym_user_rating) : height + 1000) // Adjusted the position when not visible
+      .attr('cy', d => showUserRating ? yScaleRating(d.rym_user_rating) : height + 1000)
       .attr('r', 8)
       .attr('fill', '#3D348B')
       .attr('data-album', d => d.album)
-      .attr('pointer-events', 'all'); // Enable mouse events for the circle
+      .attr('pointer-events', 'all');
 
-    // Draw circles for rym_own_rating
     mainSvg.selectAll('.own-rating-circle')
       .data(filteredData)
       .enter().append('circle')
       .attr('class', 'own-rating-circle')
+      .attr('style', 'z-index: 1;')
       .attr('cx', d => xScale(d.album) + xScale.bandwidth() / 2)
-      .attr('cy', d => showOwnRating ? yScaleRating(d.rym_own_rating) : height + 1000) // Adjusted the position when not visible
+      .attr('cy', d => showOwnRating ? yScaleRating(d.rym_own_rating) : height + 1000)
       .attr('r', 8)
       .attr('fill', '#E6AF2E')
       .attr('data-album', d => d.album)
-      .attr('pointer-events', 'all'); // Enable mouse events for the circle
+      .attr('pointer-events', 'all');
 
-    // Add X-axis
     mainSvg.append('g')
       .attr('transform', `translate(0,${height})`)
       .call(d3.axisBottom(xScale))
       .selectAll('text')
-      .remove(); // Remove album labels
+      .remove();
 
-    // Add left Y-axis for ratings
     mainSvg.append('g')
       .call(d3.axisLeft(yScaleRating).tickValues([2, 2.5, 3, 3.5, 4, 4.5, 5]));
 
-    // Draw horizontal grid lines for ratings
     const yGridRating = d3.axisLeft(yScaleRating)
       .tickValues([2.5, 3, 3.5, 4, 4.5])
       .tickSize(-width)
       .tickFormat('')
-      .tickSizeOuter(0); // Hide the outermost ticks
+      .tickSizeOuter(0);
 
-    mainSvg.append('g')
+    mainSvg.insert('g', ':first-child')
       .attr('class', 'grid')
       .call(yGridRating)
       .selectAll('line')
-      .attr('opacity', 0.2); // Adjust opacity for subtle grid lines
+      .attr('opacity', 0.2);
 
-    // Add right Y-axis for prices
     mainSvg.append('g')
       .attr('transform', `translate(${width}, 0)`)
       .call(d3.axisRight(yScalePrice)
@@ -128,27 +124,31 @@ const RatingComparisonChart = ({ data }) => {
         .tickFormat(d => `PLN ${d.toFixed(2)}`)
         .scale(yScalePrice));
 
-    // Draw area graph for current price
     const areaGenerator = d3.area()
       .x(d => xScale(d.album) + xScale.bandwidth() / 2)
       .y0(height)
       .y1(d => yScalePrice(+d.current_price));
 
-    mainSvg.append('path')
-      .datum(filteredData)
-      .attr('class', 'area')
-      .attr('d', areaGenerator)
-      .attr('fill', '#499647')
-      .attr('opacity', 0.5);
+    if (showPriceGraph) {
+      console.log(filteredData)
+      mainSvg.insert('path', ':first-child')
+        .datum(sortedData)
+        .attr('class', 'area')
+        .attr('d', areaGenerator)
+        .attr('fill', '#499647')
+        .attr('opacity', 0.5);
+    } else {
+      mainSvg.selectAll('.area').remove();
+    }
 
     // Tooltip container
-    const tooltipContainer = svg
+    const tooltipContainer = d3.select(chartRef.current)
       .append('div')
       .attr('class', 'tooltip-container')
       .style('opacity', 0)
       .style('position', 'absolute')
       .style('border', '1px solid darkgrey')
-      .style('border-radius', '4px')
+      .style('border-radius', '2px')
       .style('background-color', 'rgba(245, 245, 245, 0.7)')
       .style('padding', '8px');
 
@@ -160,10 +160,10 @@ const RatingComparisonChart = ({ data }) => {
     // Mouseover event for circles
     const handleMouseOver = (event, d) => {
       tooltipContainer.transition()
-        .duration(200)
-        .style('opacity', 0.9);
+        .duration(250)
+        .style('opacity', 1)
 
-      tooltip.html(`<h2>${d.album}</h2><br>Release Date: ${d.release_date}<br><br>User Rating: ${d.rym_user_rating}<br>Personal Rating: ${d.rym_own_rating}<br>Current Price: PLN ${d.current_price}`);
+      tooltip.html(`<strong>${d.album}</strong><br>Release date: ${d.release_date}<br><br>User Rating: ${d.rym_user_rating}<br>Own Rating: ${d.rym_own_rating}`);
       
       // Position tooltip using clientX and clientY
       tooltipContainer.style('left', `${event.clientX + 10}px`)
@@ -178,39 +178,93 @@ const RatingComparisonChart = ({ data }) => {
     };
 
     // Apply mouseover and mouseout events to both circles
-    mainSvg.selectAll('.user-rating-circle, .own-rating-circle')
+    svg.selectAll('.user-rating-circle, .own-rating-circle')
       .on('mouseover', handleMouseOver)
       .on('mouseout', handleMouseOut);
 
-  }, [data, showUserRating, showOwnRating]);
+    }, [data, showUserRating, showOwnRating, showPriceGraph, sortByReleaseDate]); // Add sortByReleaseDate to the dependency array
 
-  return (
-    <>
-      <div className='inputs'>
-        <div>
-          <label>
-            <input 
-              type="checkbox" 
-              checked={showUserRating}
-              onChange={() => setShowUserRating(!showUserRating)}
-            />
-            Show User Rating
-          </label>
+    const handleUserRatingChange = () => {
+      setShowUserRating(!showUserRating);
+    };
+  
+    const handleOwnRatingChange = () => {
+      setShowOwnRating(!showOwnRating);
+    };
+  
+    const handlePriceGraphChange = () => {
+      setShowPriceGraph(!showPriceGraph);
+    };
+  
+    const handleSortByReleaseDateChange = () => {
+      setSortByReleaseDate(true);
+    };
+  
+    const handleSortByPriceChange = () => {
+      setSortByReleaseDate(false);
+    };
+  
+    return (
+      <>
+        <div className='inputs'>
+          <div className='checkboxes'>
+            <div>
+              <label>
+                <input 
+                  type="checkbox" 
+                  checked={showUserRating}
+                  onChange={handleUserRatingChange}
+                />
+                Show<div className='user-rating'> User Rating</div>
+              </label>
+            </div>
+            <div>
+              <label>
+                <input 
+                  type="checkbox"
+                  checked={showOwnRating}
+                  onChange={handleOwnRatingChange}
+                />
+                Show<div className="personal-rating"> Personal Rating</div>
+              </label>
+            </div>
+            <div>
+              <label>
+                <input 
+                  type="checkbox" 
+                  checked={showPriceGraph}
+                  onChange={handlePriceGraphChange}
+                />
+                Show <div className="price">Price Graph</div>
+              </label>
+            </div>
+          </div>
+          <div className='radiobuttons'>
+            <div>
+              <label>
+                <input 
+                  type="radio" 
+                  checked={sortByReleaseDate}
+                  onChange={handleSortByReleaseDateChange}
+                />
+                Sort By Release Date (oldest/newest)
+              </label>
+            </div>
+            <div>
+              <label>
+                <input 
+                  type="radio" 
+                  checked={!sortByReleaseDate}
+                  onChange={handleSortByPriceChange}
+                />
+                Sort By Price (cheapest/most expensive)
+              </label>
+            </div>
+          </div>
         </div>
-        <div>
-          <label>
-            <input 
-              type="checkbox" 
-              checked={showOwnRating}
-              onChange={() => setShowOwnRating(!showOwnRating)}
-            />
-            Show Personal Rating
-          </label>
-        </div>
-      </div>
-      <div ref={chartRef}></div>
-    </>
-  );
-};
-
-export default RatingComparisonChart;
+        <div ref={chartRef}></div>
+      </>
+    );
+  };
+  
+  export default RatingComparisonChart;

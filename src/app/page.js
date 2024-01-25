@@ -9,7 +9,7 @@ const fetchData = async () => {
 
   const albums = rawData.map(({ album, current_price, release_date, rym_user_rating, rym_own_rating }) => ({
     album,
-    current_price: parseFloat(current_price),
+    current_price: parseFloat(current_price.replace(',', '.')),
     release_date,
     rym_user_rating: parseFloat(rym_user_rating), // Convert to a number if needed
     rym_own_rating: parseFloat(rym_own_rating),  // Convert to a number if needed

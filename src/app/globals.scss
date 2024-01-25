@@ -23,9 +23,36 @@ body {
 
         .inputs {
             display: flex;
-            width: 25%;
-            justify-content: space-between;
-            
+            gap: 48px;
+        }
+        
+        .user-rating {
+            color: #3D348B;
+            display: inline;
+        }
+
+        .personal-rating {
+            color: #E6AF2E;
+            display: inline;
+        }
+
+        .price {
+            color: #499647;
+            display: inline;
+        }
+
+        .radiobuttons, .checkboxes {
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+
+        .user-rating-circle,
+        .own-rating-circle {
+            // fill: transparent; /* Ensure circles are transparent for pointer events */
+            stroke: none; /* Remove circle stroke */
+            pointer-events: all; /* Enable pointer events for circles */
+            z-index: 1; /* Set a higher z-index to ensure circles are rendered on top */
         }
     }
 }
